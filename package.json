@@ -3668,7 +3668,8 @@
 										"fileInCommit",
 										"fileInBranch",
 										"fileLine",
-										"fileRange"
+										"fileRange",
+										"tagName"
 									],
 									"properties": {
 										"repository": {
@@ -3706,6 +3707,10 @@
 										"fileRange": {
 											"type": "string",
 											"markdownDescription": "Specifies the format of a range in a file URL for the custom remote service\n\nAvailable tokens\\\n`${start}` &mdash; starting line\\\n`${end}` &mdash; ending line"
+										},
+										"tagName": {
+											"type": "string",
+											"markdownDescription": "Specifies the format of a tag URL for the custom remote service\n\nAvailable tokens\\\n`${repo}` &mdash; repository path\\\n`${tagName}` &mdash; name of the tag"
 										}
 									},
 									"additionalProperties": false
@@ -6750,6 +6755,12 @@
 			{
 				"command": "gitlens.views.openCommitOnRemote",
 				"title": "Open Commit on Remote",
+				"icon": "$(globe)"
+			},
+			{
+				"command": "gitlens.views.openTagOnRemote",
+				"title": "Open Tag on Remote",
+				"category": "GitLens",
 				"icon": "$(globe)"
 			},
 			{
@@ -14867,6 +14878,11 @@
 					"when": "viewItem =~ /gitlens:commit\\b/ && gitlens:repos:withRemotes",
 					"group": "inline@99",
 					"alt": "gitlens.views.copyRemoteCommitUrl"
+				},
+				{
+					"command": "gitlens.views.openTagOnRemote",
+					"when": "gitlens:repos:withRemotes && viewItem =~ /gitlens:tag\\b(.*?\\b\\+remote\\b)/",
+					"group": "inline@99"
 				},
 				{
 					"command": "gitlens.views.cherryPick",

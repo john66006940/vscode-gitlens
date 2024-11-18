@@ -259,6 +259,7 @@ export class ViewCommands implements Disposable {
 				(n, nodes) => this.openCommitOnRemote(n, nodes),
 				this,
 			),
+			registerViewCommand('gitlens.views.openTagOnRemote', (n, nodes) => this.openTagOnRemote(n, nodes), this),
 			registerViewCommand(
 				'gitlens.views.openCommitOnRemote.multi',
 				(n, nodes) => this.openCommitOnRemote(n, nodes),
@@ -1329,6 +1330,17 @@ export class ViewCommands implements Disposable {
 		return executeCommand<OpenOnRemoteCommandArgs>(Commands.OpenOnRemote, {
 			repoPath: refs[0].repoPath,
 			resource: refs.map(r => ({ type: RemoteResourceType.Commit, sha: r.ref })),
+			clipboard: clipboard,
+		});
+	}
+
+	@log()
+	private openTagOnRemote(node: ViewRefNode, nodes?: ViewRefNode[], clipboard?: boolean) {
+		const refs = nodes?.length ? nodes.map(n => n.ref) : [node.ref];
+
+		return executeCommand<OpenOnRemoteCommandArgs>(Commands.OpenOnRemote, {
+			repoPath: refs[0].repoPath,
+			resource: refs.map(r => ({ type: RemoteResourceType.Tag, tag: r.name })),
 			clipboard: clipboard,
 		});
 	}

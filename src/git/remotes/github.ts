@@ -298,6 +298,9 @@ export class GitHubRemote extends RemoteProvider<GitHubRepositoryDescriptor> {
 		if (branch) return `${this.encodeUrl(`${this.baseUrl}/blob/${branch}/${fileName}`)}${line}`;
 		return `${this.encodeUrl(`${this.baseUrl}?path=${fileName}`)}${line}`;
 	}
+	protected override getUrlForTag(tagName: string) {
+		return this.encodeUrl(`${this.baseUrl}/releases/tag/${tagName}`);
+	}
 }
 
 const gitHubNoReplyAddressRegex = /^(?:(\d+)\+)?([a-zA-Z\d-]{1,39})@users\.noreply\.(.*)$/i;
