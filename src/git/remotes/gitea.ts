@@ -156,7 +156,7 @@ export class GiteaRemote extends RemoteProvider {
 		return `${this.encodeUrl(`${this.baseUrl}/src/${fileName}`)}${line}`;
 	}
 
-	protected getUrlForTag(tagName: string): string {
-		return this.encodeUrl(`${this.baseUrl}/releases/tag/${tagName}`);
+	protected getUrlForTag(tag: string): string {
+		return this.encodeUrl(`${this.baseUrl}/releases/tag/${tag}`);
 	}
 }

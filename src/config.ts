@@ -587,6 +587,7 @@ export interface RemotesUrlsConfig {
 export type SuppressedMessages =
 	| 'suppressCommitHasNoPreviousCommitWarning'
 	| 'suppressCommitNotFoundWarning'
+	| 'suppressTagNotFoundWarning'
 	| 'suppressCreatePullRequestPrompt'
 	| 'suppressDebugLoggingWarning'
 	| 'suppressFileNotUnderSourceControlWarning'

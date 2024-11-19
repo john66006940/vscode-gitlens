@@ -174,7 +174,7 @@ export abstract class RemoteProvider<T extends ResourceDescriptor = ResourceDesc
 	): string | undefined;
 
 	protected abstract getUrlForFile(fileName: string, branch?: string, sha?: string, range?: Range): string;
-	protected abstract getUrlForTag(tagName: string): string | undefined;
+	protected abstract getUrlForTag(tag: string): string | undefined;
 
 	protected getUrlForRepository(): string {
 		return this.baseUrl;

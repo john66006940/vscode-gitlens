@@ -34,10 +34,10 @@ export class TagsNode extends CacheableChildrenViewNode<'tags', ViewsWithTagsNod
 	}
 
 	async getChildren(): Promise<ViewNode[]> {
-		const remote = await this.repo.git.getBestRemoteWithProvider();
 		if (this.children == null) {
 			const tags = await this.repo.git.getTags({ sort: true });
 			if (tags.values.length === 0) return [new MessageNode(this.view, this, 'No tags could be found.')];
+			const remote = await this.repo.git.getBestRemoteWithProvider();
 			// TODO@eamodio handle paging
 			const tagNodes = tags.values.map(
 				t =>

@@ -172,7 +172,7 @@ export class BitbucketServerRemote extends RemoteProvider {
 		return `${this.encodeUrl(`${this.baseUrl}/browse/${fileName}`)}${line}`;
 	}
 
-	protected override getUrlForTag(tagName: string): string {
-		return this.encodeUrl(`${this.baseUrl}/commits/tag/${tagName}`);
+	protected override getUrlForTag(tag: string): string {
+		return this.encodeUrl(`${this.baseUrl}/commits/tag/${tag}`);
 	}
 }

@@ -259,10 +259,25 @@ export class ViewCommands implements Disposable {
 				(n, nodes) => this.openCommitOnRemote(n, nodes),
 				this,
 			),
-			registerViewCommand('gitlens.views.openTagOnRemote', (n, nodes) => this.openTagOnRemote(n, nodes), this),
 			registerViewCommand(
 				'gitlens.views.openCommitOnRemote.multi',
 				(n, nodes) => this.openCommitOnRemote(n, nodes),
+				this,
+			),
+			registerViewCommand('gitlens.views.openTagOnRemote', (n, nodes) => this.openTagOnRemote(n, nodes), this),
+			registerViewCommand(
+				'gitlens.views.openTagOnRemote.multi',
+				(n, nodes) => this.openTagOnRemote(n, nodes),
+				this,
+			),
+			registerViewCommand(
+				'gitlens.views.copyRemoteTagUrl',
+				(n, nodes) => this.openTagOnRemote(n, nodes, true),
+				this,
+			),
+			registerViewCommand(
+				'gitlens.views.copyRemoteTagUrl.multi',
+				(n, nodes) => this.openTagOnRemote(n, nodes, true),
 				this,
 			),
 
