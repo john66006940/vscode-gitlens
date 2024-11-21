@@ -29,12 +29,15 @@ interface Context {
 	title: string;
 }
 
-type Flags = '--hard' | '--soft';
+type ResetOptions = {
+	hard?: boolean;
+	soft?: boolean;
+};
 
 interface State {
 	repo: string | Repository;
 	reference: GitRevisionReference | GitTagReference;
-	flags: Flags[];
+	options: ResetOptions;
 }
 
 export interface ResetGitCommandArgs {
@@ -73,7 +76,7 @@ export class ResetGitCommand extends QuickCommand<State> {
 
 	async execute(state: ResetStepState) {
 		try {
-			await state.repo.git.reset(state.flags, state.reference.ref);
+			await state.repo.git.reset(state.options, state.reference.ref);
 		} catch (ex) {
 			Logger.error(ex, this.title);
 			void showGenericErrorMessage(ex.message);
@@ -89,8 +92,8 @@ export class ResetGitCommand extends QuickCommand<State> {
 			title: this.title,
 		};
 
-		if (state.flags == null) {
-			state.flags = [];
+		if (state.options == null) {
+			state.options = {};
 		}
 
 		let skippedStepOne = false;
@@ -159,7 +162,7 @@ export class ResetGitCommand extends QuickCommand<State> {
 				const result = yield* this.confirmStep(state as ResetStepState, context);
 				if (result === StepResultBreak) continue;
 
-				state.flags = result;
+				state.options = Object.assign({}, ...result);
 			}
 
 			endSteps(state);
@@ -169,24 +172,24 @@ export class ResetGitCommand extends QuickCommand<State> {
 		return state.counter < 0 ? StepResultBreak : undefined;
 	}
 
-	private *confirmStep(state: ResetStepState, context: Context): StepResultGenerator<Flags[]> {
-		const step: QuickPickStep<FlagsQuickPickItem<Flags>> = this.createConfirmStep(
+	private *confirmStep(state: ResetStepState, context: Context): StepResultGenerator<ResetOptions[]> {
+		const step: QuickPickStep<FlagsQuickPickItem<ResetOptions>> = this.createConfirmStep(
 			appendReposToTitle(`Confirm ${context.title}`, state, context),
 			[
-				createFlagsQuickPickItem<Flags>(state.flags, [], {
+				createFlagsQuickPickItem<ResetOptions>([], [], {
 					label: this.title,
 					detail: `Will reset (leaves changes in the working tree) ${getReferenceLabel(
 						context.destination,
 					)} to ${getReferenceLabel(state.reference)}`,
 				}),
-				createFlagsQuickPickItem<Flags>(state.flags, ['--soft'], {
+				createFlagsQuickPickItem<ResetOptions>([], [{ soft: true }], {
 					label: `Soft ${this.title}`,
 					description: '--soft',
 					detail: `Will soft reset (leaves changes in the index and working tree) ${getReferenceLabel(
 						context.destination,
 					)} to ${getReferenceLabel(state.reference)}`,
 				}),
-				createFlagsQuickPickItem<Flags>(state.flags, ['--hard'], {
+				createFlagsQuickPickItem<ResetOptions>([], [{ hard: true }], {
 					label: `Hard ${this.title}`,
 					description: '--hard',
 					detail: `Will hard reset (discards all changes) ${getReferenceLabel(

@@ -1335,23 +1335,9 @@ export class GitProviderService implements Disposable {
 	}
 
 	@log()
-	async reset(repoPath: string, flags: string[], ref: string): Promise<void> {
+	async reset(repoPath: string, options: { hard?: boolean; soft?: boolean } = {}, ref: string): Promise<void> {
 		const { provider, path } = this.getProvider(repoPath);
 		if (provider.reset == null) throw new ProviderNotSupportedError(provider.descriptor.name);
-
-		const options: { hard?: boolean; soft?: boolean } = {};
-		for (const flag of flags) {
-			switch (flag) {
-				case '--hard':
-					options.hard = true;
-					break;
-				case '--soft':
-					options.soft = true;
-					break;
-				default:
-					break;
-			}
-		}
 
 		return provider.reset(path, ref, options);
 	}
