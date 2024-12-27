@@ -179,13 +179,28 @@ export function fromGitLabMergeRequestProvidersApi(pr: ProviderPullRequest, prov
 }
 
 export function fromGitLabMergeRequest(pr: GitLabMergeRequestFull, provider: Provider): PullRequest {
+	let avatarUrl: string | undefined;
+	try {
+		avatarUrl = new URL(pr.author?.avatarUrl ?? '').toString();
+	} catch {
+		try {
+			const authorUrl = new URL(pr.author?.webUrl ?? '');
+			authorUrl.pathname = '';
+			authorUrl.search = '';
+			authorUrl.hash = '';
+			avatarUrl = pr.author?.avatarUrl ? authorUrl.toString() + pr.author?.avatarUrl : undefined;
+		} catch {
+			avatarUrl = undefined;
+		}
+	}
+
 	return new PullRequest(
 		provider,
 		{
 			// author
 			id: pr.author?.id ?? '',
 			name: pr.author?.name ?? 'Unknown',
-			avatarUrl: pr.author?.avatarUrl ?? '',
+			avatarUrl: avatarUrl,
 			url: pr.author?.webUrl ?? '',
 		},
 		pr.iid, // id
