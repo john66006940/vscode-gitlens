@@ -90,6 +90,7 @@ export class IntegrationService implements Disposable {
 	private async syncCloudIntegrations(forceConnect: boolean) {
 		const connectedIntegrations = new Set<IntegrationId>();
 		const loggedIn = await this.container.subscription.getAuthenticationSession();
+		const domains = new Map<string, string>();
 		if (loggedIn) {
 			const cloudIntegrations = await this.container.cloudIntegrations;
 			const connections = await cloudIntegrations?.getConnections();
@@ -100,10 +101,13 @@ export class IntegrationService implements Disposable {
 				// GKDev includes some integrations like "google" that we don't support
 				if (integrationId == null) return;
 				connectedIntegrations.add(toIntegrationId[p.provider]);
+				if (p.domain != null) {
+					domains.set(integrationId, p.domain);
+				}
 			});
 		}
 
-		for await (const integration of this.getSupportedCloudIntegrations()) {
+		for await (const integration of this.getSupportedCloudIntegrations(domains)) {
 			await integration.syncCloudConnection(
 				connectedIntegrations.has(integration.id) ? 'connected' : 'disconnected',
 				forceConnect,
@@ -121,9 +125,9 @@ export class IntegrationService implements Disposable {
 		return connectedIntegrations;
 	}
 
-	private async *getSupportedCloudIntegrations() {
+	private async *getSupportedCloudIntegrations(domains: Map<string, string>): AsyncIterable<Integration> {
 		for (const id of getSupportedCloudIntegrationIds()) {
-			yield this.get(id);
+			yield this.get(id, domains?.get(id));
 		}
 	}
 
@@ -437,6 +441,7 @@ export class IntegrationService implements Disposable {
 						await import(/* webpackChunkName: "integrations" */ './providers/github')
 					).GitHubIntegration(this.container, this.authenticationService, this.getProvidersApi.bind(this));
 					break;
+				case SelfHostedIntegrationId.CloudGitHubEnterprise:
 				case SelfHostedIntegrationId.GitHubEnterprise:
 					if (domain == null) throw new Error(`Domain is required for '${id}' integration`);
 					integration = new (
@@ -446,6 +451,7 @@ export class IntegrationService implements Disposable {
 						this.authenticationService,
 						this.getProvidersApi.bind(this),
 						domain,
+						id,
 					);
 					break;
 				case HostingIntegrationId.GitLab:

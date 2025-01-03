@@ -34,6 +34,11 @@ const enterpriseAuthProvider: IntegrationAuthenticationProviderDescriptor = Obje
 	id: enterpriseMetadata.id,
 	scopes: enterpriseMetadata.scopes,
 });
+const cloudEnterpriseMetadata = providersMetadata[SelfHostedIntegrationId.CloudGitHubEnterprise];
+const cloudEnterpriseAuthProvider: IntegrationAuthenticationProviderDescriptor = Object.freeze({
+	id: cloudEnterpriseMetadata.id,
+	scopes: cloudEnterpriseMetadata.scopes,
+});
 
 export type GitHubRepositoryDescriptor = RepositoryDescriptor;
 
@@ -294,10 +299,11 @@ export class GitHubIntegration extends GitHubIntegrationBase<HostingIntegrationI
 	}
 }
 
-export class GitHubEnterpriseIntegration extends GitHubIntegrationBase<SelfHostedIntegrationId.GitHubEnterprise> {
-	readonly authProvider = enterpriseAuthProvider;
-	readonly id = SelfHostedIntegrationId.GitHubEnterprise;
-	protected readonly key = `${this.id}:${this.domain}` as const;
+export class GitHubEnterpriseIntegration extends GitHubIntegrationBase<
+	SelfHostedIntegrationId.GitHubEnterprise | SelfHostedIntegrationId.CloudGitHubEnterprise
+> {
+	readonly authProvider;
+	protected readonly key;
 	readonly name = 'GitHub Enterprise';
 	get domain(): string {
 		return this._domain;
@@ -312,8 +318,12 @@ export class GitHubEnterpriseIntegration extends GitHubIntegrationBase<SelfHoste
 		authenticationService: IntegrationAuthenticationService,
 		getProvidersApi: () => Promise<ProvidersApi>,
 		private readonly _domain: string,
+		readonly id: SelfHostedIntegrationId.GitHubEnterprise | SelfHostedIntegrationId.CloudGitHubEnterprise,
 	) {
 		super(container, authenticationService, getProvidersApi);
+		this.key = `${this.id}:${this.domain}` as const;
+		this.authProvider =
+			this.id === SelfHostedIntegrationId.GitHubEnterprise ? enterpriseAuthProvider : cloudEnterpriseAuthProvider;
 	}
 
 	@log()
