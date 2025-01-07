@@ -2781,7 +2781,7 @@ export class GitHubGitProvider implements GitProvider, Disposable {
 	): Promise<GitRemote[]> {
 		if (repoPath == null) return [];
 
-		const providers = loadRemoteProviders(configuration.get('remotes', null));
+		const providers = loadRemoteProviders(configuration.get('remotes', null), undefined);
 
 		const uri = Uri.parse(repoPath, true);
 		const [, owner, repo] = uri.path.split('/', 3);
@@ -2798,7 +2798,7 @@ export class GitHubGitProvider implements GitProvider, Disposable {
 				'https',
 				domain,
 				path,
-				getRemoteProviderMatcher(this.container, providers)(url, domain, path),
+				(await getRemoteProviderMatcher(this.container, providers))(url, domain, path),
 				[
 					{ type: 'fetch', url: url },
 					{ type: 'push', url: url },

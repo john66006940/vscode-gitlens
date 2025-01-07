@@ -1,7 +1,11 @@
 import type { RemotesConfig } from '../../config';
+import { SelfHostedIntegrationId } from '../../constants.integrations';
 import type { Container } from '../../container';
+import type { CloudIntegrationConnection } from '../../plus/integrations/authentication/models';
+import { toIntegrationId } from '../../plus/integrations/authentication/models';
 import { Logger } from '../../system/logger';
 import { configuration } from '../../system/vscode/configuration';
+import { parseGitRemoteUrl } from '../parsers/remoteParser';
 import { AzureDevOpsRemote } from './azure-devops';
 import { BitbucketRemote } from './bitbucket';
 import { BitbucketServerRemote } from './bitbucket-server';
@@ -73,7 +77,10 @@ const builtInProviders: RemoteProviders = [
 	},
 ];
 
-export function loadRemoteProviders(cfg: RemotesConfig[] | null | undefined): RemoteProviders {
+export function loadRemoteProviders(
+	cfg: RemotesConfig[] | null | undefined,
+	connectedIntegrations: CloudIntegrationConnection[] | undefined,
+): RemoteProviders {
 	const providers: RemoteProviders = [];
 
 	if (cfg?.length) {
@@ -94,6 +101,37 @@ export function loadRemoteProviders(cfg: RemotesConfig[] | null | undefined): Re
 				matcher: matcher!,
 				creator: providerCreator,
 			});
+		}
+	}
+
+	if (connectedIntegrations?.length) {
+		for (const ci of connectedIntegrations) {
+			if (toIntegrationId[ci.provider] === SelfHostedIntegrationId.CloudGitHubEnterprise) {
+				const host = new URL(ci.domain).host;
+				const rc: RemotesConfig = {
+					domain: host,
+					regex: null,
+					name: ci.domain,
+					protocol: 'https',
+					type: 'GitHub',
+				};
+				const providerCreator = getCustomProviderCreator(rc);
+				if (providerCreator == null) continue;
+
+				let matcher: string | RegExp | undefined;
+				try {
+					matcher = rc.domain?.toLowerCase();
+					if (matcher == null) throw new Error('No matcher found');
+				} catch (ex) {
+					Logger.error(ex, `Loading remote provider '${rc.name ?? ''}' failed`);
+				}
+
+				providers.push({
+					custom: true,
+					matcher: matcher!,
+					creator: providerCreator,
+				});
+			}
 		}
 	}
 
@@ -136,12 +174,14 @@ function getCustomProviderCreator(cfg: RemotesConfig) {
 	}
 }
 
-export function getRemoteProviderMatcher(
+export async function getRemoteProviderMatcher(
 	container: Container,
 	providers?: RemoteProviders,
-): (url: string, domain: string, path: string) => RemoteProvider | undefined {
+): Promise<(url: string, domain: string, path: string) => RemoteProvider | undefined> {
 	if (providers == null) {
-		providers = loadRemoteProviders(configuration.get('remotes', null));
+		const ci = await container.cloudIntegrations;
+		const c = await ci?.getConnections();
+		providers = loadRemoteProviders(configuration.get('remotes', null), c);
 	}
 
 	return (url: string, domain: string, path: string) =>

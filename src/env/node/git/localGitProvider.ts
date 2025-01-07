@@ -5039,8 +5039,12 @@ export class LocalGitProvider implements GitProvider, Disposable {
 		let remotesPromise = this.useCaching ? this._remotesCache.get(repoPath) : undefined;
 		if (remotesPromise == null) {
 			async function load(this: LocalGitProvider): Promise<GitRemote[]> {
+				const ci = await this.container.cloudIntegrations;
+				const connections = await ci?.getConnections();
+
 				const providers = loadRemoteProviders(
 					configuration.get('remotes', this.container.git.getRepository(repoPath!)?.folder?.uri ?? null),
+					connections,
 				);
 
 				try {
@@ -5049,7 +5053,7 @@ export class LocalGitProvider implements GitProvider, Disposable {
 						this.container,
 						data,
 						repoPath!,
-						getRemoteProviderMatcher(this.container, providers),
+						await getRemoteProviderMatcher(this.container, providers),
 					);
 					return remotes;
 				} catch (ex) {
