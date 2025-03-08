@@ -110,8 +110,9 @@ import type { OpenWorkspaceLocation } from '../../../system/-webview/vscode';
 import { isDarkTheme, isLightTheme, openUrl, openWorkspace } from '../../../system/-webview/vscode';
 import { gate } from '../../../system/decorators/-webview/gate';
 import { debug, log } from '../../../system/decorators/log';
-import type { Deferrable } from '../../../system/function';
-import { debounce, disposableInterval } from '../../../system/function';
+import { disposableInterval } from '../../../system/function';
+import type { Deferrable } from '../../../system/function/debounce';
+import { debounce } from '../../../system/function/debounce';
 import { count, find, last, map } from '../../../system/iterable';
 import { flatten, updateRecordValue } from '../../../system/object';
 import {
@@ -980,7 +981,7 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 
 	@debug({ args: false })
 	private onRepositoryFileSystemChanged(e: RepositoryFileSystemChangeEvent) {
-		if (e.repository?.path !== this.repository?.path) return;
+		if (e.repository.id !== this.repository?.id) return;
 		void this.notifyDidChangeWorkingTree();
 	}
 
@@ -1365,15 +1366,15 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 					const upstreamMetadata: GraphUpstreamMetadata = {
 						name: getBranchNameWithoutRemote(upstream.name),
 						owner: getRemoteNameFromBranchName(upstream.name),
-						ahead: branch.state.ahead,
-						behind: branch.state.behind,
+						ahead: branch.upstream?.state.ahead ?? 0,
+						behind: branch.upstream?.state.behind ?? 0,
 						context: serializeWebviewItemContext<GraphItemContext>({
 							webviewItem: 'gitlens:upstreamStatus',
 							webviewItemValue: {
 								type: 'upstreamStatus',
 								ref: getReferenceFromBranch(branch),
-								ahead: branch.state.ahead,
-								behind: branch.state.behind,
+								ahead: branch.upstream?.state.ahead ?? 0,
+								behind: branch.upstream?.state.behind ?? 0,
 							},
 						}),
 					};
@@ -2555,7 +2556,7 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 
 		const branch = getSettledValue(branchResult);
 		if (branch != null) {
-			branchState = { ...branch.state };
+			branchState = { ...(branch.upstream?.state ?? { ahead: 0, behind: 0 }) };
 
 			const worktreesByBranch = data?.worktreesByBranch ?? (await getWorktreesByBranch(this.repository));
 			branchState.worktree = worktreesByBranch?.has(branch.id) ?? false;
@@ -4224,6 +4225,9 @@ function toGraphIssueTrackerType(id: string): GraphIssueTrackerType | undefined 
 		case 'azure-devops':
 			// TODO: Remove the casting once this is officially recognized by the component
 			return 'azureDevops' as GraphIssueTrackerType;
+		case 'bitbucket':
+			// TODO: Remove the casting once this is officially recognized by the component
+			return HostingIntegrationId.Bitbucket as GraphIssueTrackerType;
 		default:
 			return undefined;
 	}

@@ -57,8 +57,8 @@ import {
 import { configuration } from '../../system/-webview/configuration';
 import { getContext, onDidChangeContext } from '../../system/-webview/context';
 import { debug } from '../../system/decorators/log';
-import type { Deferrable } from '../../system/function';
-import { debounce } from '../../system/function';
+import type { Deferrable } from '../../system/function/debounce';
+import { debounce } from '../../system/function/debounce';
 import { filterMap, map } from '../../system/iterable';
 import { Logger } from '../../system/logger';
 import { getLogScope } from '../../system/logger.scope';
@@ -1995,8 +1995,8 @@ function serializeBranch(branch?: GitBranch): GitBranchShape | undefined {
 		repoPath: branch.repoPath,
 		upstream: branch.upstream,
 		tracking: {
-			ahead: branch.state.ahead,
-			behind: branch.state.behind,
+			ahead: branch.upstream?.state.ahead ?? 0,
+			behind: branch.upstream?.state.behind ?? 0,
 		},
 	};
 }

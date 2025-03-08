@@ -29,8 +29,8 @@ import { getBestPath } from '../system/-webview/path';
 import { joinUnique } from '../system/array';
 import { gate } from '../system/decorators/-webview/gate';
 import { debug, log } from '../system/decorators/log';
-import type { Deferrable } from '../system/function';
-import { debounce } from '../system/function';
+import type { Deferrable } from '../system/function/debounce';
+import { debounce } from '../system/function/debounce';
 import { count, filter, first, flatMap, groupByFilterMap, groupByMap, join, map, some, sum } from '../system/iterable';
 import { getLoggableName, Logger } from '../system/logger';
 import { getLogScope, setLogScopeExit, startLogScope } from '../system/logger.scope';
@@ -1553,7 +1553,7 @@ export class GitProviderService implements Disposable {
 
 	@log<GitProviderService['getBranchAheadRange']>({ args: { 0: b => b.name } })
 	async getBranchAheadRange(branch: GitBranch): Promise<string | undefined> {
-		if (branch.state.ahead > 0) {
+		if (branch.upstream?.state.ahead) {
 			return createRevisionRange(branch.upstream?.name, branch.ref, '..');
 		}
 

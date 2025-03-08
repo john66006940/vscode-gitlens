@@ -1,6 +1,5 @@
 import type { ConfigurationChangeEvent } from 'vscode';
 import { Disposable, Uri, window, workspace } from 'vscode';
-import type { AIModelChangeEvent } from '../../ai/aiProviderService';
 import type { CreatePullRequestActionContext } from '../../api/gitlens';
 import type { EnrichedAutolink } from '../../autolinks/models/autolinks';
 import { getAvatarUriFromGravatarEmail } from '../../avatars';
@@ -38,6 +37,7 @@ import { sortBranches } from '../../git/utils/-webview/sorting';
 import { getOpenedWorktreesByBranch, groupWorktreesByBranch } from '../../git/utils/-webview/worktree.utils';
 import { getComparisonRefsForPullRequest } from '../../git/utils/pullRequest.utils';
 import { createRevisionRange } from '../../git/utils/revision.utils';
+import type { AIModelChangeEvent } from '../../plus/ai/aiProviderService';
 import { showPatchesView } from '../../plus/drafts/actions';
 import type { Subscription } from '../../plus/gk/models/subscription';
 import type { SubscriptionChangeEvent } from '../../plus/gk/subscriptionService';
@@ -59,10 +59,11 @@ import { configuration } from '../../system/-webview/configuration';
 import { getContext, onDidChangeContext } from '../../system/-webview/context';
 import { openUrl, openWorkspace } from '../../system/-webview/vscode';
 import { debug } from '../../system/decorators/log';
-import type { Deferrable } from '../../system/function';
-import { debounce } from '../../system/function';
+import type { Deferrable } from '../../system/function/debounce';
+import { debounce } from '../../system/function/debounce';
 import { filterMap } from '../../system/iterable';
 import { getSettledValue } from '../../system/promise';
+import { SubscriptionManager } from '../../system/subscriptionManager';
 import type { ShowInCommitGraphCommandArgs } from '../plus/graph/protocol';
 import type { Change } from '../plus/patchDetails/protocol';
 import type { IpcMessage } from '../protocol';
@@ -115,10 +116,6 @@ const emptyDisposable = Object.freeze({
 	},
 });
 
-interface RepositorySubscription {
-	repo: Repository;
-	subscription?: Disposable;
-}
 interface RepositoryBranchData {
 	repo: Repository;
 	branches: GitBranch[];
@@ -407,10 +404,10 @@ export class HomeWebviewProvider implements WebviewProvider<State, State, HomeWe
 	}
 
 	private hasRepositoryChanged(): boolean {
-		if (this._repositorySubscription?.repo != null) {
+		if (this._repositorySubscription?.source != null) {
 			if (
-				this._repositorySubscription.repo.etag !== this._etagRepository ||
-				this._repositorySubscription.repo.etagFileSystem !== this._etagFileSystem
+				this._repositorySubscription.source.etag !== this._etagRepository ||
+				this._repositorySubscription.source.etagFileSystem !== this._etagFileSystem
 			) {
 				return true;
 			}
@@ -423,12 +420,12 @@ export class HomeWebviewProvider implements WebviewProvider<State, State, HomeWe
 
 	onVisibilityChanged(visible: boolean): void {
 		if (!visible) {
-			this.stopRepositorySubscription();
+			this._repositorySubscription?.pause();
 
 			return;
 		}
 
-		this.resumeRepositorySubscription();
+		this._repositorySubscription?.resume();
 
 		if (
 			this._discovering == null &&
@@ -860,7 +857,7 @@ export class HomeWebviewProvider implements WebviewProvider<State, State, HomeWe
 		};
 	}
 
-	private _repositorySubscription: RepositorySubscription | undefined;
+	private _repositorySubscription: SubscriptionManager<Repository> | undefined;
 	private selectRepository(repoPath?: string) {
 		let repo: Repository | undefined;
 		if (repoPath != null) {
@@ -872,48 +869,29 @@ export class HomeWebviewProvider implements WebviewProvider<State, State, HomeWe
 			}
 		}
 
-		if (this._repositorySubscription != null) {
-			this._repositorySubscription.subscription?.dispose();
-			this._repositorySubscription = undefined;
-		}
+		this._repositorySubscription?.dispose();
+		this._repositorySubscription = undefined;
+
 		if (repo != null) {
-			this._repositorySubscription = {
-				repo: repo,
-				subscription: this.subscribeToRepository(repo),
-			};
+			this._repositorySubscription = new SubscriptionManager(repo, r => this.subscribeToRepository(r));
+			// Start the subscription immediately if webview is visible
+			if (this.host.visible) {
+				this._repositorySubscription.start();
+			}
 		}
 
 		return repo;
-	}
-
-	private stopRepositorySubscription() {
-		if (this._repositorySubscription != null) {
-			this._repositorySubscription.subscription?.dispose();
-			this._repositorySubscription.subscription = undefined;
-		}
-	}
-
-	private resumeRepositorySubscription(force = false) {
-		if (this._repositorySubscription == null) {
-			return;
-		}
-
-		if (force || this._repositorySubscription.subscription == null) {
-			this._repositorySubscription.subscription?.dispose();
-			this._repositorySubscription.subscription = undefined;
-			this._repositorySubscription.subscription = this.subscribeToRepository(this._repositorySubscription.repo);
-		}
 	}
 
 	private resetBranchOverview() {
 		this._repositoryBranches.clear();
 
 		if (!this.host.visible) {
-			this.stopRepositorySubscription();
+			this._repositorySubscription?.pause();
 			return;
 		}
 
-		this.resumeRepositorySubscription(true);
+		this._repositorySubscription?.resume();
 	}
 
 	private subscribeToRepository(repo: Repository): Disposable {
@@ -942,7 +920,7 @@ export class HomeWebviewProvider implements WebviewProvider<State, State, HomeWe
 
 	@debug()
 	private onOverviewWipChanged(e: RepositoryFileSystemChangeEvent, repository: Repository) {
-		if (e.repository?.path !== repository.path) return;
+		if (e.repository.id !== repository.id) return;
 		if (this._etagFileSystem === repository.etagFileSystem) return;
 
 		// if the repo is already marked invalid, we already need to recompute the whole overview
@@ -977,7 +955,7 @@ export class HomeWebviewProvider implements WebviewProvider<State, State, HomeWe
 			this.selectRepository();
 		}
 
-		return this._repositorySubscription?.repo;
+		return this._repositorySubscription?.source;
 	}
 
 	private _invalidateOverview: 'repo' | 'wip' | undefined;
@@ -1011,25 +989,29 @@ export class HomeWebviewProvider implements WebviewProvider<State, State, HomeWe
 
 	private async getIntegrationStates(force = false) {
 		if (force || this._integrationStates == null) {
-			const promises = filterMap(await this.container.integrations.getConfigured(), i =>
-				isSupportedCloudIntegrationId(i.integrationId)
-					? ({
-							id: i.integrationId,
-							name: providersMetadata[i.integrationId].name,
-							icon: `gl-provider-${providersMetadata[i.integrationId].iconKey}`,
-							connected: true,
-							supports:
-								providersMetadata[i.integrationId].type === 'hosting'
-									? ['prs', 'issues']
-									: providersMetadata[i.integrationId].type === 'issues'
-									  ? ['issues']
-									  : [],
-							requiresPro:
-								supportedCloudIntegrationDescriptors.find(item => item.id === i.integrationId)
-									?.requiresPro ?? false,
-					  } satisfies IntegrationState)
-					: undefined,
-			);
+			const promises = filterMap(await this.container.integrations.getConfigured(), i => {
+				if (!isSupportedCloudIntegrationId(i.integrationId)) {
+					return undefined;
+				}
+				const supportedCloudDescriptor = supportedCloudIntegrationDescriptors.find(
+					item => item.id === i.integrationId,
+				);
+				return {
+					id: i.integrationId,
+					name: providersMetadata[i.integrationId].name,
+					icon: `gl-provider-${providersMetadata[i.integrationId].iconKey}`,
+					connected: true,
+					supports:
+						supportedCloudDescriptor?.supports != null
+							? supportedCloudDescriptor.supports
+							: providersMetadata[i.integrationId].type === 'hosting'
+							  ? ['prs', 'issues']
+							  : providersMetadata[i.integrationId].type === 'issues'
+							    ? ['issues']
+							    : [],
+					requiresPro: supportedCloudDescriptor?.requiresPro ?? false,
+				} satisfies IntegrationState;
+			});
 
 			const integrationsResults = await Promise.allSettled(promises);
 			const integrations: IntegrationState[] = [...filterMap(integrationsResults, r => getSettledValue(r))];
@@ -1417,7 +1399,6 @@ function getOverviewBranchesCore(
 			name: branch.name,
 			opened: isActive,
 			timestamp: timestamp,
-			state: branch.state,
 			status: branch.status,
 			upstream: branch.upstream,
 			worktree: wt ? { name: wt.name, uri: wt.uri.toString() } : undefined,

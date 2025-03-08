@@ -2,6 +2,7 @@ import type { TextEditor } from 'vscode';
 import { Disposable, TreeItem, TreeItemCollapsibleState, window } from 'vscode';
 import type { GitCommitish } from '../../git/gitUri';
 import { GitUri, unknownGitUri } from '../../git/gitUri';
+import { ensureWorkingUri } from '../../git/gitUri.utils';
 import { isBranchReference } from '../../git/utils/reference.utils';
 import { isSha } from '../../git/utils/revision.utils';
 import { showReferencePicker } from '../../quickpicks/referencePicker';
@@ -11,8 +12,8 @@ import { isVirtualUri } from '../../system/-webview/vscode';
 import { gate } from '../../system/decorators/-webview/gate';
 import { debug, log } from '../../system/decorators/log';
 import { weakEvent } from '../../system/event';
-import type { Deferrable } from '../../system/function';
-import { debounce } from '../../system/function';
+import type { Deferrable } from '../../system/function/debounce';
+import { debounce } from '../../system/function/debounce';
 import { Logger } from '../../system/logger';
 import { getLogScope, setLogScopeExit } from '../../system/logger.scope';
 import { uriEquals } from '../../system/uri';
@@ -161,14 +162,8 @@ export class FileHistoryTrackerNode extends SubscribeableViewNode<'file-history-
 
 		let gitUri = await GitUri.fromUri(editor.document.uri);
 
-		let uri;
-		if (gitUri.sha != null) {
-			// If we have a sha, normalize the history to the working file (so we get a full history all the time)
-			const workingUri = await this.view.container.git.getWorkingUri(gitUri.repoPath!, gitUri);
-			if (workingUri != null) {
-				uri = workingUri;
-			}
-		}
+		// If we have a sha, normalize the history to the working file (so we get a full history all the time)
+		const uri = await ensureWorkingUri(this.view.container, gitUri);
 
 		if (this.hasUri && uriEquals(uri ?? gitUri, this.uri)) {
 			return true;

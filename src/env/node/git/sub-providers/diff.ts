@@ -23,7 +23,7 @@ import {
 	parseGitLogSimpleFormat,
 	parseGitLogSimpleRenamed,
 } from '../../../../git/parsers/logParser';
-import { isUncommittedStaged } from '../../../../git/utils/revision.utils';
+import { isRevisionRange, isUncommittedStaged } from '../../../../git/utils/revision.utils';
 import { showGenericErrorMessage } from '../../../../messages';
 import { configuration } from '../../../../system/-webview/configuration';
 import { splitPath } from '../../../../system/-webview/path';
@@ -43,8 +43,23 @@ export class DiffGitSubProvider implements GitDiffSubProvider {
 	) {}
 
 	@log()
-	async getChangedFilesCount(repoPath: string, ref?: string): Promise<GitDiffShortStat | undefined> {
+	async getChangedFilesCount(
+		repoPath: string,
+		to?: string,
+		from?: string,
+		options?: { uris?: Uri[] },
+	): Promise<GitDiffShortStat | undefined> {
 		const scope = getLogScope();
+
+		const args: string[] = [];
+		if (to != null) {
+			// Handle revision ranges specially if there is no `from`, otherwise `prepareToFromDiffArgs` will duplicate the range
+			if (isRevisionRange(to) && from == null) {
+				args.push(to);
+			} else {
+				prepareToFromDiffArgs(to, from, args);
+			}
+		}
 
 		try {
 			const data = await this.git.exec(
@@ -52,8 +67,9 @@ export class DiffGitSubProvider implements GitDiffSubProvider {
 				'diff',
 				'--shortstat',
 				'--no-ext-diff',
-				ref ? ref : undefined,
+				...args,
 				'--',
+				options?.uris?.map(u => this.provider.getRelativePath(u, repoPath)) ?? undefined,
 			);
 			if (!data) return undefined;
 			return parseGitDiffShortStat(data);
@@ -78,34 +94,7 @@ export class DiffGitSubProvider implements GitDiffSubProvider {
 		const scope = getLogScope();
 		const args = [`-U${options?.context ?? 3}`];
 
-		if (to === uncommitted) {
-			if (from != null) {
-				args.push(from);
-			} else {
-				// Get only unstaged changes
-				from = 'HEAD';
-			}
-		} else if (to === uncommittedStaged) {
-			args.push('--staged');
-			if (from != null) {
-				args.push(from);
-			} else {
-				// Get only staged changes
-				from = 'HEAD';
-			}
-		} else if (from == null) {
-			if (to === '' || to.toUpperCase() === 'HEAD') {
-				from = 'HEAD';
-				args.push(from);
-			} else {
-				from = `${to}^`;
-				args.push(from, to);
-			}
-		} else if (to === '') {
-			args.push(from);
-		} else {
-			args.push(from, to);
-		}
+		from = prepareToFromDiffArgs(to, from, args);
 
 		let paths: Set<string> | undefined;
 		let untrackedPaths: string[] | undefined;
@@ -640,4 +629,35 @@ export class DiffGitSubProvider implements GitDiffSubProvider {
 			void showGenericErrorMessage('Unable to open directory compare');
 		}
 	}
+}
+function prepareToFromDiffArgs(to: string, from: string | undefined, args: string[]) {
+	if (to === uncommitted) {
+		if (from != null) {
+			args.push(from);
+		} else {
+			// Get only unstaged changes
+			from = 'HEAD';
+		}
+	} else if (to === uncommittedStaged) {
+		args.push('--staged');
+		if (from != null) {
+			args.push(from);
+		} else {
+			// Get only staged changes
+			from = 'HEAD';
+		}
+	} else if (from == null) {
+		if (to === '' || to.toUpperCase() === 'HEAD') {
+			from = 'HEAD';
+			args.push(from);
+		} else {
+			from = `${to}^`;
+			args.push(from, to);
+		}
+	} else if (to === '') {
+		args.push(from);
+	} else {
+		args.push(from, to);
+	}
+	return from;
 }

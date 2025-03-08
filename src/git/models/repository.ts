@@ -15,8 +15,8 @@ import { getScopedCounter } from '../../system/counter';
 import { gate } from '../../system/decorators/-webview/gate';
 import { memoize } from '../../system/decorators/-webview/memoize';
 import { debug, log, logName } from '../../system/decorators/log';
-import type { Deferrable } from '../../system/function';
-import { debounce } from '../../system/function';
+import type { Deferrable } from '../../system/function/debounce';
+import { debounce } from '../../system/function/debounce';
 import { filter, groupByMap, join, min, some } from '../../system/iterable';
 import { getLoggableName, Logger } from '../../system/logger';
 import { getLogScope, startLogScope } from '../../system/logger.scope';
@@ -138,7 +138,7 @@ export class RepositoryChangeEvent {
 }
 
 export interface RepositoryFileSystemChangeEvent {
-	readonly repository?: Repository;
+	readonly repository: Repository;
 	readonly uris: Uri[];
 }
 
@@ -926,9 +926,7 @@ export class Repository implements Disposable {
 
 		this._updatedAt = Date.now();
 
-		if (this._fireChangeDebounced == null) {
-			this._fireChangeDebounced = debounce(this.fireChangeCore.bind(this), defaultRepositoryChangeDelay);
-		}
+		this._fireChangeDebounced ??= debounce(this.fireChangeCore.bind(this), defaultRepositoryChangeDelay);
 
 		this._pendingRepoChange = this._pendingRepoChange?.with(changes) ?? new RepositoryChangeEvent(this, changes);
 
@@ -964,17 +962,9 @@ export class Repository implements Disposable {
 
 		this._updatedAt = Date.now();
 
-		if (this._fireFileSystemChangeDebounced == null) {
-			this._fireFileSystemChangeDebounced = debounce(
-				this.fireFileSystemChangeCore.bind(this),
-				this._fsChangeDelay,
-			);
-		}
+		this._fireFileSystemChangeDebounced ??= debounce(this.fireFileSystemChangeCore.bind(this), this._fsChangeDelay);
 
-		if (this._pendingFileSystemChange == null) {
-			this._pendingFileSystemChange = { repository: this, uris: [] };
-		}
-
+		this._pendingFileSystemChange ??= { repository: this, uris: [] };
 		const e = this._pendingFileSystemChange;
 		e.uris.push(uri);
 

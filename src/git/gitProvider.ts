@@ -338,6 +338,7 @@ export interface GitConfigSubProvider {
 	getConfig?(repoPath: string, key: GitConfigKeys): Promise<string | undefined>;
 	setConfig?(repoPath: string, key: GitConfigKeys, value: string | undefined): Promise<void>;
 	getCurrentUser(repoPath: string): Promise<GitUser | undefined>;
+	getDefaultWorktreePath?(repoPath: string): Promise<string | undefined>;
 	getGitDir?(repoPath: string): Promise<GitDir | undefined>;
 }
 
@@ -358,7 +359,12 @@ export interface GitContributorsSubProvider {
 }
 
 export interface GitDiffSubProvider {
-	getChangedFilesCount(repoPath: string, ref?: string): Promise<GitDiffShortStat | undefined>;
+	getChangedFilesCount(
+		repoPath: string,
+		to?: string,
+		from?: string,
+		options?: { uris?: Uri[] },
+	): Promise<GitDiffShortStat | undefined>;
 	getDiff?(
 		repoPath: string | Uri,
 		to: string,
@@ -447,6 +453,7 @@ export interface GitPatchSubProvider {
 }
 
 export interface GitRefsSubProvider {
+	getReference(repoPath: string, ref: string): Promise<GitReference | undefined>;
 	hasBranchOrTag(
 		repoPath: string | undefined,
 		options?: {
@@ -559,7 +566,7 @@ export interface GitStashSubProvider {
 export interface GitStatusSubProvider {
 	getStatus(repoPath: string | undefined): Promise<GitStatus | undefined>;
 	getStatusForFile?(repoPath: string, uri: Uri): Promise<GitStatusFile | undefined>;
-	getStatusForFiles?(repoPath: string, pathOrGlob: Uri): Promise<GitStatusFile[] | undefined>;
+	getStatusForPath?(repoPath: string, pathOrGlob: Uri): Promise<GitStatusFile[] | undefined>;
 
 	getPausedOperationStatus?(repoPath: string): Promise<GitPausedOperationStatus | undefined>;
 	abortPausedOperation?(repoPath: string, options?: { quit?: boolean }): Promise<void>;
