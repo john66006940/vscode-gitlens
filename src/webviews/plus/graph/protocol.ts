@@ -117,6 +117,8 @@ export interface State extends WebviewState<'gitlens.graph' | 'gitlens.views.gra
 	context?: GraphContexts & { settings?: SerializedGraphItemContext };
 	nonce?: string;
 	workingTreeStats?: GraphWorkingTreeStats;
+	/** Search query to be executed once */
+	searchRequest?: SearchQuery;
 	searchResults?: DidSearchParams['results'];
 	defaultSearchMode?: GraphSearchMode;
 	useNaturalLanguageSearch?: boolean;
@@ -326,6 +328,35 @@ export interface DidEnsureRowParams {
 	id?: string; // `undefined` if the row was not found
 }
 export const EnsureRowRequest = new IpcRequest<EnsureRowParams, DidEnsureRowParams>(scope, 'rows/ensure');
+
+export interface SearchHistoryGetParams {
+	repoPath: string | undefined;
+}
+export interface DidSearchHistoryGetParams {
+	history: SearchQuery[];
+}
+export const SearchHistoryGetRequest = new IpcRequest<SearchHistoryGetParams, DidSearchHistoryGetParams>(
+	scope,
+	'search/history/get',
+);
+
+export interface SearchHistoryStoreParams {
+	repoPath: string | undefined;
+	search: SearchQuery;
+}
+export const SearchHistoryStoreRequest = new IpcRequest<SearchHistoryStoreParams, DidSearchHistoryGetParams>(
+	scope,
+	'search/history/store',
+);
+
+export interface SearchHistoryDeleteParams {
+	repoPath: string | undefined;
+	query: string;
+}
+export const SearchHistoryDeleteRequest = new IpcRequest<SearchHistoryDeleteParams, DidSearchHistoryGetParams>(
+	scope,
+	'search/history/delete',
+);
 
 export type DidGetCountParams =
 	| {

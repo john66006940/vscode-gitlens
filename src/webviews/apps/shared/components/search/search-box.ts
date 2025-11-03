@@ -166,11 +166,26 @@ export class GlSearchBox extends GlElement {
 	}
 
 	logSearch(query: SearchQuery): void {
-		this.searchInput?.logSearch(query);
+		void this.searchInput?.logSearch(query);
 	}
 
 	setSearchQuery(query: string): void {
 		this._value = query;
+	}
+
+	/**
+	 * Updates the search query from an external source (e.g., extension host).
+	 * This will update all search properties without triggering a new search.
+	 */
+	setExternalSearchQuery(search: SearchQuery): void {
+		this._value = search.query;
+		this.filter = search.filter ?? true;
+		this.matchAll = search.matchAll ?? false;
+		this.matchCase = search.matchCase ?? false;
+		this.matchRegex = search.matchRegex ?? true;
+		this.matchWholeWord = search.matchWholeWord ?? false;
+		this.naturalLanguage = Boolean(search.naturalLanguage);
+		this.searchInput?.setExternalSearchQuery(search);
 	}
 
 	private handleShortcutKeys(e: KeyboardEvent) {

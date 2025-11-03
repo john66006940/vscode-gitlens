@@ -25,6 +25,7 @@ import type {
 } from '../../../config';
 import { GlyphChars } from '../../../constants';
 import type { ContextKeys } from '../../../constants.context';
+import type { SearchQuery } from '../../../constants.search';
 import type { StoredGraphFilters, StoredGraphRefType } from '../../../constants.storage';
 import type { GraphShownTelemetryContext, GraphTelemetryContext, TelemetryEvents } from '../../../constants.telemetry';
 import type { Container } from '../../../container';
@@ -80,11 +81,8 @@ import type {
 import { isRepository, RepositoryChange, RepositoryChangeComparisonMode } from '../../../git/models/repository';
 import { uncommitted } from '../../../git/models/revision';
 import type { GitGraphSearch } from '../../../git/search';
-import {
-	getSearchQueryComparisonKey,
-	parseSearchQuery,
-	processNaturalLanguageToSearchQuery,
-} from '../../../git/search';
+import { getSearchQueryComparisonKey, parseSearchQuery } from '../../../git/search';
+import { processNaturalLanguageToSearchQuery } from '../../../git/search.naturalLanguage';
 import { getAssociatedIssuesForBranch } from '../../../git/utils/-webview/branch.issue.utils';
 import { getBranchMergeTargetInfo, getStarredBranchIds } from '../../../git/utils/-webview/branch.utils';
 import { getRemoteIconUri } from '../../../git/utils/-webview/icons';
@@ -130,7 +128,7 @@ import { disposableInterval } from '../../../system/function';
 import type { Deferrable } from '../../../system/function/debounce';
 import { debounce } from '../../../system/function/debounce';
 import { count, find, join, last } from '../../../system/iterable';
-import { flatten, updateRecordValue } from '../../../system/object';
+import { flatten, hasKeys, updateRecordValue } from '../../../system/object';
 import {
 	getSettledValue,
 	pauseOnCancelOrTimeout,
@@ -227,6 +225,9 @@ import {
 	GetMoreRowsCommand,
 	GetRowHoverRequest,
 	OpenPullRequestDetailsCommand,
+	SearchHistoryDeleteRequest,
+	SearchHistoryGetRequest,
+	SearchHistoryStoreRequest,
 	SearchOpenInViewCommand,
 	SearchRequest,
 	supportedRefMetadataTypes,
@@ -239,6 +240,11 @@ import {
 	UpdateSelectionCommand,
 } from './protocol';
 import type { GraphWebviewShowingArgs } from './registration';
+import { SearchHistory } from './searchHistory';
+
+function hasSearchQuery(arg: any): arg is { repository: Repository; search: SearchQuery } {
+	return arg?.repository != null && arg?.search != null;
+}
 
 const defaultGraphColumnsSettings: GraphColumnsSettings = {
 	ref: { width: 130, isHidden: false, order: 0 },
@@ -320,6 +326,7 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 	private _theme: ColorTheme | undefined;
 	private _repositoryEventsDisposable: Disposable | undefined;
 	private _lastFetchedDisposable: Disposable | undefined;
+	private _searchHistory: SearchHistory | undefined;
 
 	private isWindowFocused: boolean = true;
 
@@ -421,6 +428,8 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 		return context;
 	}
 
+	private _searchRequest: SearchQuery | undefined;
+
 	async onShowing(
 		loading: boolean,
 		_options?: WebviewShowOptions,
@@ -458,6 +467,10 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 
 				void this.onGetMoreRows({ id: id }, true);
 			}
+		} else if (hasSearchQuery(arg)) {
+			this.repository = arg.repository;
+			this._searchRequest = arg.search;
+			this.updateState();
 		} else {
 			if (isSerializedState<State>(arg) && arg.state.selectedRepository != null) {
 				this.repository = this.container.git.getRepository(arg.state.selectedRepository);
@@ -806,6 +819,15 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 				break;
 			case SearchOpenInViewCommand.is(e):
 				this.onSearchOpenInView(e.params);
+				break;
+			case SearchHistoryGetRequest.is(e):
+				this.onSearchHistoryGetRequest(SearchHistoryGetRequest, e);
+				break;
+			case SearchHistoryStoreRequest.is(e):
+				void this.onSearchHistoryStoreRequest(SearchHistoryStoreRequest, e);
+				break;
+			case SearchHistoryDeleteRequest.is(e):
+				void this.onSearchHistoryDeleteRequest(SearchHistoryDeleteRequest, e);
 				break;
 			case UpdateColumnsCommand.is(e):
 				this.onColumnsChanged(e.params);
@@ -1563,6 +1585,46 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 	}
 
 	@debug()
+	private onSearchHistoryGetRequest<T extends typeof SearchHistoryGetRequest>(
+		requestType: T,
+		msg: IpcCallMessageType<T>,
+	) {
+		this._searchHistory ??= new SearchHistory(this.container.storage, this.repository?.path);
+		try {
+			void this.host.respond(requestType, msg, { history: this._searchHistory.get() });
+		} catch {
+			void this.host.respond(requestType, msg, { history: [] });
+		}
+	}
+
+	@debug()
+	private async onSearchHistoryStoreRequest<T extends typeof SearchHistoryStoreRequest>(
+		requestType: T,
+		msg: IpcCallMessageType<T>,
+	) {
+		this._searchHistory ??= new SearchHistory(this.container.storage, this.repository?.path);
+
+		try {
+			await this._searchHistory.store(msg.params.search);
+		} finally {
+			void this.host.respond(requestType, msg, { history: this._searchHistory.get() });
+		}
+	}
+
+	@debug()
+	private async onSearchHistoryDeleteRequest<T extends typeof SearchHistoryDeleteRequest>(
+		requestType: T,
+		msg: IpcCallMessageType<T>,
+	) {
+		this._searchHistory ??= new SearchHistory(this.container.storage, this.repository?.path);
+		try {
+			await this._searchHistory.delete(msg.params.query);
+		} finally {
+			void this.host.respond(requestType, msg, { history: this._searchHistory.get() });
+		}
+	}
+
+	@debug()
 	private async onSearchRequest<T extends typeof SearchRequest>(requestType: T, msg: IpcCallMessageType<T>) {
 		using sw = new Stopwatch(`GraphWebviewProvider.onSearchRequest(${this.host.id})`);
 
@@ -1573,7 +1635,7 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 		}
 
 		const query = msg.params.search ? parseSearchQuery(msg.params.search) : undefined;
-		const types = query != null ? join(query?.keys(), ',') : '';
+		const types = query != null ? join(query.operations.keys(), ',') : '';
 
 		let results;
 		let exception: (Error & { original?: Error }) | undefined;
@@ -1710,11 +1772,7 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 
 		void this.container.views.searchAndCompare.search(this.repository.path, e.search, {
 			label: { label: `for ${e.search.query}` },
-			reveal: {
-				select: true,
-				focus: false,
-				expand: true,
-			},
+			reveal: { select: true, focus: false, expand: true },
 		});
 	}
 
@@ -2210,7 +2268,7 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 		if (graph == null) return undefined;
 
 		const storedExcludeRefs = filters?.excludeRefs;
-		if (storedExcludeRefs == null || Object.keys(storedExcludeRefs).length === 0) return undefined;
+		if (!hasKeys(storedExcludeRefs)) return undefined;
 
 		const asWebviewUri = (uri: Uri) => this.host.asWebviewUri(uri);
 		const useAvatars = configuration.get('graph.avatars', undefined, true);
@@ -2597,6 +2655,9 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 		this.cancelOperation('branchState');
 		this.cancelOperation('state');
 
+		const searchRequest = this._searchRequest;
+		this._searchRequest = undefined;
+
 		if (this.container.git.repositoryCount === 0) {
 			return { ...this.host.baseWebviewState, allowed: true, repositories: [] };
 		}
@@ -2763,7 +2824,7 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 		const useNaturalLanguageSearch = this.container.storage.get('graph:useNaturalLanguageSearch', true);
 		const featurePreview = this.getFeaturePreview();
 
-		return {
+		const result: State = {
 			...this.host.baseWebviewState,
 			webroot: this.host.getWebRoot(),
 			windowFocused: this.isWindowFocused,
@@ -2815,7 +2876,9 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 			featurePreview: featurePreview,
 			orgSettings: this.getOrgSettings(),
 			mcpBannerCollapsed: this.getMcpBannerCollapsed(),
+			searchRequest: searchRequest,
 		};
+		return result;
 	}
 
 	private updateColumns(columnsCfg: GraphColumnsConfig) {
@@ -2988,7 +3051,7 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 		if (repoPath == null) return;
 
 		let excludeTypes = this.getFiltersByRepo(repoPath)?.excludeTypes;
-		if ((excludeTypes == null || !Object.keys(excludeTypes).length) && value === false) {
+		if (!hasKeys(excludeTypes) && value === false) {
 			return;
 		}
 
@@ -3016,6 +3079,7 @@ export class GraphWebviewProvider implements WebviewProvider<State, State, Graph
 
 	private resetRepositoryState() {
 		this._getBranchesAndTagsTips = undefined;
+		this._searchHistory = undefined;
 		this.setGraph(undefined);
 		this.setSelectedRows(undefined);
 	}
